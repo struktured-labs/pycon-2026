@@ -32,6 +32,13 @@
 - Corollary: **"Responsibility and protection must scale."** If the contribution side has been amplified by AI, the maintainer-side defenses (review processes, gating, contributor vetting, community-protection mechanisms) have to scale with it — otherwise the gap widens and the project takes the hit. Symmetric scaling, not unilateral throttling.
 - Prescription: **"More human in the loop."** Note the inversion of the usual industry phrase (which is typically about keeping a human in the loop of an AI system). Here the speaker is flipping it — *more* humans (or more human attention per change) in the contribution pipeline as AI volume grows. The fix to AI-amplified throughput is not more automation; it's more deliberate human review density.
 
+## Q&A
+
+- **Audience question:** Where / in what spaces is the community discussing AI-contribution policy? (i.e. asking about *forums for the conversation*.)
+- **Speaker's answer:** answered by *example* rather than venue — described a tactic where maintainers force contributors to manually re-open a closed ticket as a friction gate.
+  - Effectively a **"hacky CAPTCHA for PRs"** — proof-of-human-effort via a small, annoying-on-purpose manual step that AI-generated/spam contributors are unlikely to bother completing.
+- **My take:** not a fan — pushes the cost onto good-faith contributors too, and it's an arms race the maintainer side won't win. Also, I think the asker was really after *where do we discuss this as a community*, and that didn't get answered.
+
 ## Personal takeaway
 
 - Talk ended here. Overall: enjoyable, but the practical mechanics of the "human in the loop / human connections" prescription stayed abstract — the *what* (more humans, scale defenses) was clear, the *how* (where do those humans come from, who pays for the attention, what does this look like operationally for a 1-maintainer project) wasn't really answered.
