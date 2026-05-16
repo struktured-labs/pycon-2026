@@ -2,7 +2,7 @@
 
 | Field         | Value                                                                  |
 | ------------- | ---------------------------------------------------------------------- |
-| **Author**    | (your name) <struktured@strukturedlabs.com>                            |
+| **Author**    | (Carmelo Piccione) <carmelo.piccione@gmail.com>                        |
 | **Status**    | Draft                                                                  |
 | **Type**      | Standards Track                                                        |
 | **Created**   | 2026-05-16                                                             |
