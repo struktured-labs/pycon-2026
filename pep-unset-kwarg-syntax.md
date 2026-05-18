@@ -28,9 +28,46 @@ patch_user(1, email=None)           # explicit clear; name and age bound to UNSE
 
 Python functions cannot today distinguish "the caller did not supply this argument" from "the caller passed `None`." Every workaround — `_MISSING = object()`, `dataclasses.MISSING`, `**kwargs` + `in`, `Optional[T] = None` with documented "None means omitted" conventions — sacrifices at least one of: type-checker fidelity, runtime guarantee, or call-site ergonomics.
 
-The distinction matters in PATCH-style HTTP endpoints (RFC 7396 JSON Merge Patch), ORM partial updates, `dataclasses.replace`, configuration overrides, and any code that forwards a subset of received keyword arguments.
+### The default-forwarding bug
 
-PEP 661 standardizes a `sentinel()` factory at the language level, but leaves the call-site ergonomics and the runtime guarantee (caller cannot fabricate the omission marker) unsolved. This PEP supplies both, while deliberately scoping the new sentinel to its specific purpose.
+The most pervasive symptom is what happens when a wrapper forwards its own arguments to a callee whose default differs:
+
+```python
+def f(x: int | None = 5):       # f's default is 5
+    return x
+
+def g(x: int | None = None):    # g's default is None
+    return f(x=x)               # always passes x — overrides f's default
+
+g()                             # returns None, NOT 5
+```
+
+Every wrapper, middleware, factory, and convenience constructor in Python that re-calls a target function with received keyword arguments has this bug latent in it. The current correct pattern requires either (a) per-argument sentinel checks before forwarding, or (b) `**kwargs` plus manual `in`-tests — both verbose, both easy to get wrong silently.
+
+With this PEP:
+
+```python
+def g(*, x?: int | None):
+    if x is UNSET:
+        return f()              # don't forward; f's default of 5 wins
+    return f(x=x)               # forward, including explicit None
+
+g()                             # returns 5 — correct
+g(x=None)                       # returns None — explicit clear
+```
+
+Or with the forwarding helper (see `inspect.drop_unset` below):
+
+```python
+def g(*, x?: int | None):
+    return f(**drop_unset(x=x))
+```
+
+### Other affected surfaces
+
+The same omission-vs-None distinction matters in PATCH-style HTTP endpoints (RFC 7396 JSON Merge Patch), ORM partial updates, `dataclasses.replace`, configuration overrides, and any code that forwards a subset of received keyword arguments to a downstream callee.
+
+PEP 661 standardizes a `sentinel()` factory at the language level, but leaves the call-site ergonomics, the runtime guarantee (caller cannot fabricate the omission marker), and the forwarding helper unsolved. This PEP supplies all three, while deliberately scoping the new sentinel to its specific purpose.
 
 ## Specification
 
@@ -69,6 +106,25 @@ For a parameter `x?: T`:
 2. **Runtime guarantee.** Passing any value `v` where `v is inspect.UNSET` explicitly to a `?:`-marked parameter raises `TypeError`. This is the property a library-only sentinel cannot provide.
 3. **Body-side type.** Static type checkers SHOULD treat the in-body type of `x` as `T | type(inspect.UNSET)`. Narrowing via `is`/`is not UNSET` works as expected.
 4. **Call-site type.** Static type checkers SHOULD reject `inspect.UNSET` as a call-site argument to a `?:`-marked parameter.
+5. **Forwarding-safety check.** Static type checkers SHOULD reject expressions of type `T | type(UNSET)` as call-site arguments to parameters whose annotated type is `T` (without `UnsetType` in the union). This prevents the default-forwarding bug shown in Motivation — wrappers cannot accidentally pass a possibly-`UNSET` value through a parameter that doesn't expect it. The wrapper must either narrow first or use `inspect.drop_unset` to strip omitted values from the forwarded mapping.
+
+### Forwarding helper
+
+A new function `inspect.drop_unset(**kwargs) -> dict` is added:
+
+```python
+def drop_unset(**kwargs):
+    """Return a dict containing only kwargs whose values are not UNSET.
+    Intended for forwarding subsets of received omissible parameters."""
+    return {k: v for k, v in kwargs.items() if v is not UNSET}
+```
+
+Canonical forwarding pattern:
+
+```python
+def wrapper(*, name?: str, age?: int, **rest):
+    return inner(**drop_unset(name=name, age=age), **rest)
+```
 
 ### Match statements
 
@@ -124,6 +180,7 @@ Per-call overhead in `initialize_locals`: a constant-time check skipped entirely
 - **Allowing callers to pass `UNSET` explicitly.** Defeats the runtime guarantee that makes `is UNSET` in the body meaningful.
 - **`T?` (TypeScript/Kotlin-style postfix).** Conflates "nullable" with "omissible." Python already has `T | None` for the former.
 - **A new builtin predicate (`given(x)`, `was_passed(x)`).** Considered to avoid exposing any sentinel value to user code, but the bar for adding builtins is high enough that this trade — extra language surface for a single use case — does not clear it. `inspect.UNSET` is a thinner ask.
+- **Call-site syntax for conditional forwarding (`f(x?=v)` or `f(x?)`).** Considered for symmetry with the parameter-side marker — would let wrappers write `f(x?=x)` instead of `f(**drop_unset(x=x))`. Rejected because (a) burning the `?` token in a second position doubles the token-budget cost, (b) the `inspect.drop_unset` helper covers the same ergonomics with one helper call per forwarding site, and (c) the type-checker forwarding-safety rule (Specification §5) catches the actual class of bugs the syntax would prevent. Call-site sugar is at best a convenience for the helper pattern; helpers are not painful enough to justify additional syntax.
 - **Library-only solution (PEP 661 alone).** Provides the value but not the marker, the implicit default, the runtime guarantee, or the asymmetric type semantics. This PEP complements 661, not competes with it.
 
 ## Open Questions
